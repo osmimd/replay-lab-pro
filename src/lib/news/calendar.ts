@@ -3,7 +3,7 @@ export const HIGH_IMPACT = "High Impact Expected";
 export const ALERT_LEAD_SECONDS = 30 * 60;
 
 export interface NewsEvent {
-  /** unix seconds (UTC). null = all-day release with no clock time */
+  /** Unix seconds (UTC). null means no clock time is specified. */
   utc: number | null;
   /** New York calendar date, YYYY-MM-DD (from date_ny) */
   dateNy: string;
@@ -12,6 +12,8 @@ export interface NewsEvent {
   actual: string | null;
   forecast: string | null;
   previous: string | null;
+  /** Previous cached timestamp explicitly replaced by this source-backed correction. */
+  supersedesUtc?: number | null;
 }
 
 function parseCsvRows(text: string): string[][] {
@@ -66,6 +68,7 @@ export function parseCalendarCsv(text: string): NewsEvent[] {
   const iActual = col("actual");
   const iForecast = col("forecast");
   const iPrevious = col("previous");
+  const iSupersedes = col("supersedes_utc");
 
   if (iDate < 0 || iUtc < 0 || iEvent < 0 || iImpact < 0) {
     throw new Error("This file is missing one of: date_ny, datetime_utc, event, impact.");
@@ -85,6 +88,13 @@ export function parseCalendarCsv(text: string): NewsEvent[] {
       forecast: cell(iForecast),
       previous: cell(iPrevious),
     };
+    const supersedes = cell(iSupersedes);
+    if (e.utc !== null && supersedes === "missing") {
+      e.supersedesUtc = null;
+    } else if (e.utc !== null && supersedes) {
+      const previousUtc = Date.parse(supersedes) / 1000;
+      if (Number.isFinite(previousUtc)) e.supersedesUtc = previousUtc;
+    }
     if (e.impact === HIGH_IMPACT) out.push(e);
   }
   return out.sort((a, b) => a.dateNy.localeCompare(b.dateNy) || (a.utc ?? 0) - (b.utc ?? 0));
@@ -92,15 +102,28 @@ export function parseCalendarCsv(text: string): NewsEvent[] {
 
 export function mergeNewsEvents(...groups: NewsEvent[][]): NewsEvent[] {
   const byKey = new Map<string, NewsEvent>();
+  const supersededKeys = new Set<string>();
 
   for (const events of groups) {
     for (const event of events) {
       const key = `${event.dateNy}|${event.utc ?? "all-day"}|${event.event}|${event.impact}`;
+      if (
+        event.utc !== null &&
+        event.supersedesUtc !== undefined &&
+        event.supersedesUtc !== event.utc
+      ) {
+        supersededKeys.add(
+          `${event.dateNy}|${event.supersedesUtc ?? "all-day"}|${event.event}|${event.impact}`,
+        );
+      }
       byKey.set(key, event);
     }
   }
 
-  return [...byKey.values()].sort(
+  return [...byKey.entries()]
+    .filter(([key]) => !supersededKeys.has(key))
+    .map(([, event]) => event)
+    .sort(
     (a, b) =>
       a.dateNy.localeCompare(b.dateNy) ||
       (a.utc ?? 0) - (b.utc ?? 0) ||

@@ -63,7 +63,7 @@ export function NewsPanel({
           No calendar loaded. Tap Load CSV and choose replay_lab_economic_calendar.csv.
         </p>
       ) : dayEvents.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No high-impact USD news on this day.</p>
+        <p className="text-xs text-muted-foreground">No events loaded for this day. Calendar coverage may be incomplete.</p>
       ) : (
         <ul className="flex flex-col gap-1.5">
           {dayEvents.map((e, i) => {
@@ -81,7 +81,7 @@ export function NewsPanel({
                 }}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="num text-xs font-semibold">{timed ? fmtTime(e.utc!, tz) : "All day"}</span>
+                  <span className="num text-xs font-semibold">{timed ? fmtTime(e.utc!, tz) : "Time not specified"}</span>
                   {soon && (
                     <span className="text-[10px] font-semibold" style={{ color: "var(--bear)" }}>
                       NEXT {ALERT_LEAD_SECONDS / 60} MIN
